@@ -1,0 +1,82 @@
+global:
+  listen_addr: ":7000"
+  read_timeout: "30s"
+  write_timeout: "30s"
+
+middlewares:
+  # 认证中间件 (JWT)
+  auth_jwt:
+    enabled: true # 是否启用该中间件
+    order: 1 # 在中间件链中的顺序
+    config:
+      secret_key: "${JWT_SECRET}" # 支持从环境变量读取
+      token_lookup: "header:Authorization"
+      # 可以配置哪些路由需要跳过认证
+      skip_paths: ["/healthz", "/login"]
+
+  # 限流中间件
+  RateLimiter:
+    enabled: true
+    order: 2
+    config:
+      strategy: "ip" # 可选: "ip", "route", "combined"
+      # 全局路由限流配置 (当strategy为route或combined时生效)
+      global:
+        requests_per_second: 1000
+        burst: 500
+      # 每个IP的限流配置 (当strategy为ip或combined时生效)
+      per_ip:
+        requests_per_second: 50
+        burst: 20
+      # 存储后端： "local"（内存）或 "redis"（分布式）
+      store: "local"
+      redis_addr: "localhost:6379" # 如果store是redis，则需要此配置
+
+  # 请求日志中间件
+  request_logger:
+    enabled: true
+    order: 3
+    config:
+      level: "info"
+      format: "json"
+
+  # URL重写中间件
+  url_rewriter:
+    enabled: true
+    order: 4
+    config:
+      rules:
+        - path: "/v1/old-api/**"
+          target: "/v1/new-api/"
+          # 更多复杂规则，如正则替换
+        - path: "/users/(\\d+)/profile"
+          target: "/internal/profile?user_id=$1"
+
+# 上游服务配置 (动态路由规则)
+upstreams:
+  - name: "user-service"
+    scheme: "http"
+    hosts: ["localhost:8081", "localhost:8082"]
+    load_balancing: "round_robin"
+    routes:
+      - path: "/api/users/**"
+        methods: ["GET", "POST"]
+        # 可选：重写为后端路径前缀，例如去掉 /api
+        rewrite: "/users/"
+
+  - name: "product-service"
+    scheme: "http"
+    hosts: ["localhost:9091"]
+    load_balancing: "round_robin"
+    routes:
+      - path: "/api/products/**"
+        rewrite: "/products/"
+
+# 配置源（决定upstreams和middlewares从哪里加载）
+config_source:
+  type: "file"
+  file_path: "./config/gateway.yaml"
+  etcd:
+    endpoints: ["localhost:2379"]
+    key: "/my-gateway/config"
+    watch: true
