@@ -19,10 +19,13 @@ type Balancer interface {
 	Add(UpstreamNode)
 	Remove(UpstreamNode)
 	Balance(string) (UpstreamNode, error)
-	// Inc(string)
-	// Done(string)
+	Inc(string)
+	Done(string)
 	// RequestCtx() func(string)
+
 	Name() string
+	Algo() string
+	Hosts() []UpstreamNode
 }
 
 // Factory is the factory that generates Balancer,

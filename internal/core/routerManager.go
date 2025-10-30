@@ -3,7 +3,6 @@ package core
 import (
 	"crypto/tls"
 	"errors"
-	"hash/crc32"
 	"log"
 	"net"
 	"net/http"
@@ -19,19 +18,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// upstreamNode 表示一个上游服务的单个节点（host）
-type upstreamNode struct {
-	url *url.URL
-}
-
-// upstreamState 维护某个上游服务的节点列表与负载均衡状态
-type upstreamState struct {
-	name  string
-	nodes []upstreamNode
-	rrIdx uint64 // round-robin 计数器
-	algo  string // load balancing algorithm: round_robin|ip_hash (default round_robin)
-}
-
 // routeEntry 路由表项（简单前缀匹配 + 可选重写）
 type routeEntry struct {
 	balancerIdx int
@@ -45,11 +31,6 @@ type RouterManager struct {
 	configSource config.ConfigSource
 	table        atomic.Value // stores routingTable
 }
-
-// type routingTable struct {
-// 	upstreams []upstreamState
-// 	routes    []routeEntry
-// }
 
 type routingTable struct {
 	balancers []balancer.Balancer
@@ -207,15 +188,14 @@ func (rm *RouterManager) UpdateUpstreams(upstreams []config.UpstreamConfig) {
 
 func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 	var tbl routingTable
-	// 1) 解析上游
+
 	for _, up := range upstreams {
 		scheme := up.Scheme
 		if scheme == "" {
 			scheme = "http"
 		}
 
-		// st := upstreamState{name: up.Name, algo: strings.ToLower(up.LoadBalancing)}
-
+		// 1) 解析上游服务节点
 		nodes := []balancer.UpstreamNode{}
 		for _, host := range up.Hosts {
 			var u *url.URL
@@ -246,7 +226,6 @@ func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 			log.Printf("failed to build balancer for upstream %q: %v", up.Name, err)
 			continue
 		}
-
 		tbl.balancers = append(tbl.balancers, balancerx)
 
 		// 2) 解析路由
@@ -264,31 +243,13 @@ func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 			})
 		}
 	}
+
+	// 启动健康检测
+	balancer.HealthCheckAll(tbl.balancers, 30)
+
 	// 优先匹配更长的前缀
 	sort.Slice(tbl.routes, func(i, j int) bool { return len(tbl.routes[i].prefix) > len(tbl.routes[j].prefix) })
 	return tbl
-}
-
-// 轮询选择下一个节点
-func (u *upstreamState) pickNode(c *gin.Context) *upstreamNode {
-	n := len(u.nodes)
-	if n == 0 {
-		return nil
-	}
-	switch u.algo {
-	case "ip_hash":
-		ip := c.ClientIP()
-		if ip == "" {
-			// fallback to rr if no IP
-			idx := int(atomic.AddUint64(&u.rrIdx, 1)) % n
-			return &u.nodes[idx]
-		}
-		v := crc32.ChecksumIEEE([]byte(ip)) % uint32(n)
-		return &u.nodes[int(v)]
-	default: // round_robin
-		idx := int(atomic.AddUint64(&u.rrIdx, 1)) % n
-		return &u.nodes[idx]
-	}
 }
 
 // 将 pattern 转换为标准前缀（去掉 /** 并确保以 / 结尾，便于前缀替换）

@@ -9,6 +9,7 @@ type BaseBalancer struct {
 	hosts []UpstreamNode
 	name  string
 	algo  string
+	alive map[string]bool
 }
 
 // Add new host to the balancer
@@ -53,4 +54,12 @@ func (b *BaseBalancer) RequestCtx() func(string) {
 
 func (b *BaseBalancer) Name() string {
 	return b.name
+}
+
+func (b *BaseBalancer) Algo() string {
+	return b.algo
+}
+
+func (b *BaseBalancer) Hosts() []UpstreamNode {
+	return b.hosts
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ClientIP returns the client IP, honoring X-Forwarded-For when present.
@@ -44,4 +45,20 @@ func ParseCIDRs(cidrs []string) []*net.IPNet {
 		}
 	}
 	return out
+}
+
+var ConnectionTimeout = 3 * time.Second
+
+func IsBackendAlive(host string) bool {
+	addr, err := net.ResolveTCPAddr("tcp", host)
+	if err != nil {
+		return false
+	}
+	resolveAddr := net.JoinHostPort(addr.IP.String(), strconv.Itoa(addr.Port))
+	conn, err := net.DialTimeout("tcp", resolveAddr, ConnectionTimeout)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
