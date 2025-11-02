@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"LensGateway.com/internal/util"
+	"LensGateway.com/util"
 	"github.com/gin-gonic/gin"
 )
 

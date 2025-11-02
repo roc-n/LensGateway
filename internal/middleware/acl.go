@@ -4,7 +4,7 @@ import (
 	"net"
 	"net/http"
 
-	"LensGateway.com/internal/util"
+	"LensGateway.com/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,7 +13,7 @@ import (
 //	whitelist: ["127.0.0.1/32", "10.0.0.0/8"]
 //	blacklist: ["192.168.1.100/32"]
 //
-// If whitelist not empty, only allow those; blacklist always denies.
+// If whitelist not empty, only allow those; blacklist always deny.
 func init() {
 	Register("acl", func(cfg map[string]any) (gin.HandlerFunc, error) {
 		whitelist := util.ParseCIDRs(util.ToStringSlice(cfg["whitelist"]))

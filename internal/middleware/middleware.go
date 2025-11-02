@@ -8,18 +8,18 @@ import (
 	"time"
 
 	"LensGateway.com/internal/config"
-	"LensGateway.com/internal/util"
+	"LensGateway.com/util"
 	"github.com/gin-gonic/gin"
 )
 
 // MiddlewareCreator 是一个函数类型，它接收一个配置map，返回一个gin.HandlerFunc
-// 这是让中间件变得可配置的核心！
+// 作为中间件可配置的核心
 type MiddlewareCreator func(config map[string]any) (gin.HandlerFunc, error)
 
-// registry 中间件创建器注册表
+// 中间件注册表
 var registry = make(map[string]MiddlewareCreator)
 
-// Register 注册一个中间件创建器
+// 注册一个中间件创建器
 func Register(name string, creator MiddlewareCreator) {
 	if _, exists := registry[name]; exists {
 		panic(fmt.Sprintf("Middleware %s is already registered", name))
@@ -27,7 +27,7 @@ func Register(name string, creator MiddlewareCreator) {
 	registry[name] = creator
 }
 
-// GetCreator 获取一个已注册的创建器
+// 获取一个已注册的创建器
 func GetCreator(name string) (MiddlewareCreator, error) {
 	creator, exists := registry[name]
 	if !exists {
@@ -36,7 +36,7 @@ func GetCreator(name string) (MiddlewareCreator, error) {
 	return creator, nil
 }
 
-// SetupMiddlewares 根据配置，动态创建和排序中间件链
+// 根据配置，动态创建和排序中间件链
 func SetupMiddlewares(router *gin.Engine, middlewareConfigs map[string]config.MiddlewareConfig) error {
 	type middlewareItem struct {
 		order   int

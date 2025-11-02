@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"LensGateway.com/internal/util"
+	"LensGateway.com/util"
 )
 
 // ReadAlive reads the alive status of the site

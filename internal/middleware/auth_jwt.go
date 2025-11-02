@@ -1,21 +1,15 @@
 package middleware
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
-	"LensGateway.com/internal/util"
+	"LensGateway.com/util"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
-
-// Lightweight JWT (HS256) verification without external dependency.
-// Only validates signature + exp if present. For more algs/claims, swap to a full JWT lib.
 
 func init() {
 	Register("auth_jwt", func(cfg map[string]any) (gin.HandlerFunc, error) {
@@ -35,28 +29,42 @@ func init() {
 				}
 			}
 
-			token := extractToken(c, lookup)
-			if token == "" {
+			tokenStr := extractToken(c, lookup)
+			if tokenStr == "" {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 				return
 			}
-			if err := verifyHS256(token, secret); err != nil {
+
+			// Parse and validate the token using the library
+			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+				// Validate the alg is what we expect (HS256)
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+				}
+				return []byte(secret), nil
+			})
+
+			if err != nil {
+				// The library automatically handles expiration checks.
+				if errors.Is(err, jwt.ErrTokenExpired) {
+					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
+				} else {
+					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+				}
+				return
+			}
+
+			if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+				// Optional: set claims to context for downstream use
+				c.Set("jwt_claims", claims)
+				if sub, err := claims.GetSubject(); err == nil {
+					c.Set("auth.sub", sub)
+				}
+			} else {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 				return
 			}
-			// Minimal claims: if exp present, ensure not expired
-			if claims, _ := parseClaims(token); claims != nil {
-				if exp, ok := claims["exp"].(float64); ok {
-					if time.Now().Unix() > int64(exp) {
-						c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
-						return
-					}
-				}
-				// Optional: set sub to context
-				if sub, ok := claims["sub"].(string); ok {
-					c.Set("auth.sub", sub)
-				}
-			}
+
 			c.Next()
 		}, nil
 	})
@@ -74,9 +82,11 @@ func extractToken(c *gin.Context, lookup string) string {
 	switch strings.ToLower(source) {
 	case "header":
 		v := c.Request.Header.Get(key)
+		// Standard: "Bearer <token>"
 		if strings.HasPrefix(strings.ToLower(v), "bearer ") {
 			return strings.TrimSpace(v[7:])
 		}
+		// Also support just the token
 		return strings.TrimSpace(v)
 	case "query":
 		return c.Query(key)
@@ -86,35 +96,4 @@ func extractToken(c *gin.Context, lookup string) string {
 		}
 	}
 	return ""
-}
-
-func verifyHS256(token, secret string) error {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return errors.New("invalid token format")
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(parts[0] + "." + parts[1]))
-	sig := mac.Sum(nil)
-	want := base64.RawURLEncoding.EncodeToString(sig)
-	if !hmac.Equal([]byte(want), []byte(parts[2])) {
-		return errors.New("bad signature")
-	}
-	return nil
-}
-
-func parseClaims(token string) (map[string]interface{}, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("invalid token format")
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, err
-	}
-	var m map[string]interface{}
-	if err := json.Unmarshal(payload, &m); err != nil {
-		return nil, err
-	}
-	return m, nil
 }

@@ -57,7 +57,7 @@ upstreams:
   - name: "user-service"
     scheme: "http"
     hosts: ["localhost:8081", "localhost:8082"]
-    load_balancing: "round_robin"
+    load_balancing: "round-robin"
     routes:
       - path: "/api/users/**"
         methods: ["GET", "POST"]
@@ -67,7 +67,7 @@ upstreams:
   - name: "product-service"
     scheme: "http"
     hosts: ["localhost:9091"]
-    load_balancing: "round_robin"
+    load_balancing: "round-robin"
     routes:
       - path: "/api/products/**"
         rewrite: "/products/"
