@@ -15,6 +15,7 @@ import (
 
 	"LensGateway.com/internal/balancer"
 	"LensGateway.com/internal/config"
+	"LensGateway.com/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,6 +25,7 @@ type routeEntry struct {
 	prefix      string // 例如 /api/users/
 	methods     map[string]struct{}
 	rewrite     string // 将 prefix 重写为 rewrite
+	middlewares []gin.HandlerFunc
 }
 
 // RouterManager 核心路由管理器
@@ -91,6 +93,15 @@ func (rm *RouterManager) HandleRequest(c *gin.Context) {
 			}
 		}
 
+		// 命中路由，执行该路由专属的中间件链
+		c.Set("route.prefix", rt.prefix) // 确保路由级中间件能拿到前缀
+		for _, mw := range rt.middlewares {
+			mw(c)
+			if c.IsAborted() {
+				return
+			}
+		}
+
 		// 命中该路由，选择一个上游节点
 		if rt.balancerIdx < 0 || rt.balancerIdx >= len(tbl.balancers) {
 			// 检查索引合法
@@ -101,7 +112,8 @@ func (rm *RouterManager) HandleRequest(c *gin.Context) {
 		node, err := balancerx.Balance(ip)
 		if err != nil {
 			log.Printf("failed to balance upstream: %v", err)
-
+			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"error": "no healthy upstream node available"})
+			return
 		}
 
 		// 2) URL 重写（仅基于前缀替换）
@@ -115,7 +127,6 @@ func (rm *RouterManager) HandleRequest(c *gin.Context) {
 		// 设置一些上下文信息供日志等中间件采集
 		c.Set("upstream.name", balancerx.Name())
 		c.Set("upstream.host", node.Url.String())
-		c.Set("route.prefix", rt.prefix)
 		// 设置 path（Director 中也会校正）
 		c.Request.URL.Path = newPath
 		proxy.ServeHTTP(c.Writer, c.Request)
@@ -235,11 +246,38 @@ func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 			for _, m := range r.Methods {
 				methods[strings.ToUpper(m)] = struct{}{}
 			}
+
+			// 创建路由级中间件
+			var routeMiddlewares []gin.HandlerFunc
+			for _, mwConf := range r.Middlewares {
+				mwName, _ := mwConf["name"].(string)
+				if mwName == "" {
+					log.Printf("skip middleware with empty name on route %s", prefix)
+					continue
+				}
+				creator, err := middleware.GetCreator(mwName)
+				if err != nil {
+					log.Printf("skip unregistered middleware %q on route %s", mwName, prefix)
+					continue
+				}
+				mwCfg, _ := mwConf["config"].(map[string]any)
+				if mwCfg == nil {
+					mwCfg = make(map[string]any)
+				}
+				handler, err := creator(mwCfg)
+				if err != nil {
+					log.Printf("failed to create middleware %q on route %s: %v", mwName, prefix, err)
+					continue
+				}
+				routeMiddlewares = append(routeMiddlewares, handler)
+			}
+
 			tbl.routes = append(tbl.routes, routeEntry{
 				balancerIdx: len(tbl.balancers) - 1,
 				prefix:      prefix,
 				methods:     methods,
 				rewrite:     r.Rewrite,
+				middlewares: routeMiddlewares,
 			})
 		}
 	}

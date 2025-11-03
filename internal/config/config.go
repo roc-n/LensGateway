@@ -25,6 +25,8 @@ type RouteConfig struct {
 	Methods []string `mapstructure:"methods"`
 	// 可选：将匹配到的前缀重写为该值（如将 /api/users/ 重写为 /users/）
 	Rewrite string `mapstructure:"rewrite"`
+	// Middlewares defines a list of middleware configurations for this specific route.
+	Middlewares []map[string]any `mapstructure:"middlewares"`
 }
 
 // UpstreamConfig 上游服务配置

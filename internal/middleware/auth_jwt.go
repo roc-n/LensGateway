@@ -15,18 +15,17 @@ func init() {
 	Register("auth_jwt", func(cfg map[string]any) (gin.HandlerFunc, error) {
 		secret := util.StrOr(cfg["secret_key"], "")
 		if secret == "" {
-			return nil, errors.New("auth_jwt.secret_key required")
+			// For route-level middleware, a global secret might not be required.
+			// We can allow it to be passed per-route in the future.
 		}
 		lookup := util.StrOr(cfg["token_lookup"], "header:Authorization")
-		skip := util.ToStringSlice(cfg["skip_paths"]) // paths to bypass
 
 		return func(c *gin.Context) {
-			// Skip paths
-			for _, p := range skip {
-				if p != "" && strings.HasPrefix(c.Request.URL.Path, p) {
-					c.Next()
-					return
-				}
+			// If secret is not configured for this middleware instance, skip.
+			routeSecret := util.StrOr(cfg["secret_key"], secret)
+			if routeSecret == "" {
+				c.Next()
+				return
 			}
 
 			tokenStr := extractToken(c, lookup)
@@ -41,7 +40,7 @@ func init() {
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 				}
-				return []byte(secret), nil
+				return []byte(routeSecret), nil
 			})
 
 			if err != nil {

@@ -6,7 +6,7 @@ global:
 middlewares:
   # 认证中间件 (JWT)
   auth_jwt:
-    enabled: true # 是否启用该中间件
+    enabled: false # 是否启用该中间件
     order: 1 # 在中间件链中的顺序
     config:
       secret_key: "${JWT_SECRET}" # 支持从环境变量读取
@@ -63,6 +63,13 @@ upstreams:
         methods: ["GET", "POST"]
         # 可选：重写为后端路径前缀，例如去掉 /api
         rewrite: "/users/"
+        # 为此路由配置专属的 auth_jwt 中间件
+        middlewares:
+          - name: "auth_jwt"
+            config:
+              # 密钥现在在这里定义
+              secret_key: "${JWT_SECRET}" # 从环境变量读取
+              token_lookup: "header:Authorization"
 
   - name: "product-service"
     scheme: "http"
@@ -71,6 +78,8 @@ upstreams:
     routes:
       - path: "/api/products/**"
         rewrite: "/products/"
+        # 此路由不需要鉴权，因此不配置 middlewares
+
 
 # 配置源（决定upstreams和middlewares从哪里加载）
 config_source:
