@@ -70,11 +70,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to setup middlewares: %v", err)
 	}
-	// 设置一个通用路由，所有请求都由RouterManager处理
-	router.NoRoute(routerManager.HandleRequest)
+	// capture all routes except configured ones(e.g. /healthz)
+	router.Any("/*any", routerManager.HandleRequest)
 
-	// 启动服务器
-	log.Printf("Lens Gateway starting on %s", conf.Global.ListenAddr)
+	// start server
+	log.Printf("LensGateway starting on %s", conf.Global.ListenAddr)
 	if err := router.Run(conf.Global.ListenAddr); err != nil {
 		log.Fatal(err)
 	}
