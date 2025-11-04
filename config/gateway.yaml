@@ -4,20 +4,28 @@ global:
   write_timeout: "30s"
 
 middlewares:
-  # 认证中间件 (JWT)
+
+  # request log middleware
+  logging:
+    enabled: true
+    order: 1
+    config:
+      buffer_size: 1024 # default size of the buffered channel for log entries
+
+  # auth middleware (JWT)
   auth_jwt:
     enabled: false # 是否启用该中间件
-    order: 1 # 在中间件链中的顺序
+    order: 2 # 在中间件链中的顺序
     config:
       secret_key: "${JWT_SECRET}" # 支持从环境变量读取
       token_lookup: "header:Authorization"
       # 可以配置哪些路由需要跳过认证
       skip_paths: ["/healthz", "/login"]
 
-  # 限流中间件
-  RateLimiter:
+  # rate limiting middleware
+  rate_limiter:
     enabled: true
-    order: 2
+    order: 3
     config:
       strategy: "ip" # 可选: "ip", "route", "combined"
       # 全局路由限流配置 (当strategy为route或combined时生效)
@@ -32,15 +40,7 @@ middlewares:
       store: "local"
       redis_addr: "localhost:6379" # 如果store是redis，则需要此配置
 
-  # 请求日志中间件
-  request_logger:
-    enabled: true
-    order: 3
-    config:
-      level: "info"
-      format: "json"
-
-  # URL重写中间件
+  # URL rewrite middleware
   url_rewriter:
     enabled: true
     order: 4

@@ -7,21 +7,21 @@ import (
 
 	"LensGateway.com/internal/config"
 	"LensGateway.com/internal/core"
+	_ "LensGateway.com/internal/logging"
 	"LensGateway.com/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	// 加载配置
+	// Load configuration.
 	conf, err := config.LoadConfig("./config/gateway.yaml")
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// 初始化路由
-	router := gin.Default()
-
-	// 健康检查
+	// Initialize router using gin.New() for full middleware control.
+	router := gin.New()
+	// Gateway health check endpoint.
 	router.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
 	// 设置动态路由和反向代理（支持 etcd 动态上游）
@@ -65,13 +65,13 @@ func main() {
 	// 在注册用户中间件之前，先挂载路由预匹配中间件，便于后续限流按 route.prefix 生效
 	router.Use(routerManager.PreMatchMiddleware())
 
-	// 注册中间件（注意：gin.Default() 已含默认日志/恢复中间件，可能与自定义日志重复）
+	// register other global middlewares
 	err = middleware.SetupMiddlewares(router, conf.Middlewares)
 	if err != nil {
 		log.Fatalf("Failed to setup middlewares: %v", err)
 	}
 	// capture all routes except configured ones(e.g. /healthz)
-	router.Any("/*any", routerManager.HandleRequest)
+	router.NoRoute(routerManager.HandleRequest)
 
 	// start server
 	log.Printf("LensGateway starting on %s", conf.Global.ListenAddr)
