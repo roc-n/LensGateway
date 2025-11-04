@@ -34,7 +34,7 @@ type Factory func(string, string, []UpstreamNode) Balancer
 
 var factories = make(map[string]Factory)
 
-// Build generates the corresponding Balancer according to the algorithm
+// Generate the corresponding Balancer according to the algorithm
 func Build(name, algo string, hosts []UpstreamNode) (Balancer, error) {
 	factory, ok := factories[algo]
 	if !ok {
