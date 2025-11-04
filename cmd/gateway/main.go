@@ -9,6 +9,7 @@ import (
 	"LensGateway.com/internal/core"
 	_ "LensGateway.com/internal/logging"
 	"LensGateway.com/internal/middleware"
+	"github.com/common-nighthawk/go-figure"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,6 +22,16 @@ func main() {
 
 	// Initialize router using gin.New() for full middleware control.
 	router := gin.New()
+	// Set trusted proxies if configured
+	trustedProxies := conf.Global.TrustedProxies
+	if len(trustedProxies) == 0 {
+		trustedProxies = []string{"127.0.0.1", "::1"}
+	}
+	err = router.SetTrustedProxies(trustedProxies)
+	if err != nil {
+		log.Fatalf("Failed to set trusted proxies: %v", err)
+	}
+
 	// Gateway health check endpoint.
 	router.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
@@ -74,7 +85,8 @@ func main() {
 	router.NoRoute(routerManager.HandleRequest)
 
 	// start server
-	log.Printf("LensGateway starting on %s", conf.Global.ListenAddr)
+	fig := figure.NewFigure("LensGateway", "", true)
+	fig.Print()
 	if err := router.Run(conf.Global.ListenAddr); err != nil {
 		log.Fatal(err)
 	}
