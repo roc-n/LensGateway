@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"fmt"
 	"time"
 
 	"LensGateway.com/internal/middleware"
@@ -32,7 +33,6 @@ func init() {
 			latency := time.Since(start)
 			entry := &Entry{
 				Timestamp: start,
-				Level:     "info", // 默认为info级别
 				ClientIP:  c.ClientIP(),
 				Method:    c.Request.Method,
 				Path:      c.Request.URL.Path,
@@ -56,15 +56,127 @@ func init() {
 				entry.Auth.Status = "success"
 			}
 
-			// Append any errors recorded in Gin context during processing,
-			// elevate log level to "error" and record the error details.
-			if len(c.Errors) > 0 {
-				entry.Level = "error"
-				entry.Error = c.Errors.String()
-			}
+			// Determine level based on errors, upstream status and latency (configurable).
+			entry.Level = determineLevel(c, entry, cfg)
 
 			// hand the filled log entry to the logging service asynchronously.
 			loggingService.Log(entry)
 		}, nil
 	})
+}
+
+// determineLevel decides the log level for a request based on context and config.
+// It may also set entry.Error when upstream or context errors are present.
+func determineLevel(c *gin.Context, entry *Entry, cfg map[string]any) string {
+	// 1) If Gin recorded errors in context, treat as error.
+	if len(c.Errors) > 0 {
+		entry.Error = c.Errors.String()
+		return "error"
+	}
+
+	// 2) If proxy/transport set an upstream error into context, treat as error
+	if ue, ok := c.Get("upstream.error"); ok {
+		entry.Error = fmt.Sprint(ue)
+		return "error"
+	}
+
+	// 3) If upstream status present, prefer it for severity
+	if us, ok := c.Get("upstream.status"); ok {
+		switch v := us.(type) {
+		case int:
+			if v >= 500 {
+				return "error"
+			}
+			if v >= 400 {
+				// treat 4xx as warn by default if configured, else info
+				if cfg != nil {
+					if cv, ok := cfg["client_error_as_warn"]; ok {
+						if bv, ok := cv.(bool); ok && bv {
+							return "warn"
+						}
+					}
+				}
+				return "info"
+			}
+		case int64:
+			if v >= 500 {
+				return "error"
+			}
+			if v >= 400 {
+				if cfg != nil {
+					if cv, ok := cfg["client_error_as_warn"]; ok {
+						if bv, ok := cv.(bool); ok && bv {
+							return "warn"
+						}
+					}
+				}
+				return "info"
+			}
+		case float64:
+			iv := int(v)
+			if iv >= 500 {
+				return "error"
+			}
+			if iv >= 400 {
+				if cfg != nil {
+					if cv, ok := cfg["client_error_as_warn"]; ok {
+						if bv, ok := cv.(bool); ok && bv {
+							return "warn"
+						}
+					}
+				}
+				return "info"
+			}
+		case string:
+			// try parse
+			var iv int
+			_, err := fmt.Sscanf(v, "%d", &iv)
+			if err == nil {
+				if iv >= 500 {
+					return "error"
+				}
+				if iv >= 400 {
+					if cfg != nil {
+						if cv, ok := cfg["client_error_as_warn"]; ok {
+							if bv, ok := cv.(bool); ok && bv {
+								return "warn"
+							}
+						}
+					}
+					return "info"
+				}
+			}
+		}
+	}
+
+	// 4) Latency-based warning
+	var warnMs int64 = 1000
+	if cfg != nil {
+		// support multiple possible keys
+		if v, ok := cfg["latency_warn_ms"]; ok {
+			switch x := v.(type) {
+			case int:
+				warnMs = int64(x)
+			case int64:
+				warnMs = x
+			case float64:
+				warnMs = int64(x)
+			}
+		} else if v, ok := cfg["warn_latency_ms"]; ok {
+			switch x := v.(type) {
+			case int:
+				warnMs = int64(x)
+			case int64:
+				warnMs = x
+			case float64:
+				warnMs = int64(x)
+			}
+		}
+	}
+	if entry.LatencyMs >= warnMs {
+		return "warn"
+	}
+
+	// 5) Default: info
+	return "info"
 }

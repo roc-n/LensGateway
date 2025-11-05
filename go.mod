@@ -11,7 +11,12 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.14
 )
 
-require github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
+require (
+	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
+	github.com/rs/zerolog v1.34.0
+)
+
+require github.com/mattn/go-colorable v0.1.13 // indirect
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
@@ -19,7 +24,7 @@ require (
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
-	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
+	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect

@@ -7,8 +7,6 @@ import (
 // Global 服务全局配置
 type GlobalConfig struct {
 	ListenAddr     string   `mapstructure:"listen_addr"`
-	ReadTimeout    string   `mapstructure:"read_timeout"`
-	WriteTimeout   string   `mapstructure:"write_timeout"`
 	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 

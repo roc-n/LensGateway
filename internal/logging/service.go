@@ -1,27 +1,27 @@
 package logging
 
 import (
-	"encoding/json"
 	"log"
 	"os"
+
+	"github.com/rs/zerolog"
 )
 
 // Global Logger Monitor, responsible for asynchronous processing and output of logs.
 type Service struct {
 	logChan chan *Entry
-	writer  *log.Logger
+	logger  zerolog.Logger
 }
 
 func NewService(bufferSize int) *Service {
 	if bufferSize <= 0 {
 		bufferSize = 1024 // Default size
 	}
+	// Create a zerolog logger that writes compact JSON to stdout by default.
+	zlogger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	return &Service{
-		// Create a buffered channel with a configurable size.
 		logChan: make(chan *Entry, bufferSize),
-		// Currnetly simply outputs formatted logs to standard output,
-		// TODO can be replaced with file or network writer in the future.
-		writer: log.New(os.Stdout, "", 0),
+		logger:  zlogger,
 	}
 }
 
@@ -29,13 +29,17 @@ func NewService(bufferSize int) *Service {
 func (s *Service) Start() {
 	go func() {
 		for entry := range s.logChan {
-			// Format as json and output.
-			line, err := json.Marshal(entry)
-			if err != nil {
-				log.Printf("failed to marshal log entry: %v", err)
-				continue
+			// Choose log level based on entry.Level; default to info.
+			switch entry.Level {
+			case "error", "err":
+				s.logger.Error().EmbedObject(entry).Msg("")
+			case "warn", "warning":
+				s.logger.Warn().EmbedObject(entry).Msg("")
+			case "debug":
+				s.logger.Debug().EmbedObject(entry).Msg("")
+			default:
+				s.logger.Info().EmbedObject(entry).Msg("")
 			}
-			s.writer.Println(string(line))
 		}
 	}()
 }
@@ -46,6 +50,7 @@ func (s *Service) Log(entry *Entry) {
 	select {
 	case s.logChan <- entry:
 	default:
+		// Use standard log to avoid recursion into zerolog writer
 		log.Println("log channel is full, dropping log entry")
 	}
 }

@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	// Load configuration.
+	// load configuration
 	conf, err := config.LoadConfig("./config/gateway.yaml")
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
@@ -22,7 +22,7 @@ func main() {
 
 	// Initialize router using gin.New() for full middleware control.
 	router := gin.New()
-	// Set trusted proxies if configured
+	// set trusted proxies if configured
 	trustedProxies := conf.Global.TrustedProxies
 	if len(trustedProxies) == 0 {
 		trustedProxies = []string{"127.0.0.1", "::1"}
@@ -32,7 +32,7 @@ func main() {
 		log.Fatalf("Failed to set trusted proxies: %v", err)
 	}
 
-	// Gateway health check endpoint.
+	// gateway health check endpoint
 	router.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
 	// 设置动态路由和反向代理（支持 etcd 动态上游）
@@ -66,14 +66,14 @@ func main() {
 			}()
 		}
 	} else {
-		// 文件模式
+		// config file mode
 		routerManager, err = core.NewRouterManager(conf.Upstreams, conf.ConfigSource)
 		if err != nil {
 			log.Fatalf("Failed to create router manager: %v", err)
 		}
 	}
 
-	// 在注册用户中间件之前，先挂载路由预匹配中间件，便于后续限流按 route.prefix 生效
+	// register pre-match middleware for route prefix matching
 	router.Use(routerManager.PreMatchMiddleware())
 
 	// register other global middlewares
