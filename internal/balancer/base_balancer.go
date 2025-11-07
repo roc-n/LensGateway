@@ -6,31 +6,31 @@ import (
 
 type BaseBalancer struct {
 	sync.RWMutex
-	hosts []UpstreamNode
+	nodes []UpstreamNode
 	name  string
 	algo  string
 	alive map[string]bool
 }
 
 // Add new host to the balancer
-func (b *BaseBalancer) Add(host UpstreamNode) {
+func (b *BaseBalancer) Add(node UpstreamNode) {
 	b.Lock()
 	defer b.Unlock()
-	for _, h := range b.hosts {
-		if h == host {
+	for _, n := range b.nodes {
+		if n == node {
 			return
 		}
 	}
-	b.hosts = append(b.hosts, host)
+	b.nodes = append(b.nodes, node)
 }
 
 // Remove new host from the balancer
 func (b *BaseBalancer) Remove(host UpstreamNode) {
 	b.Lock()
 	defer b.Unlock()
-	for i, h := range b.hosts {
+	for i, h := range b.nodes {
 		if h == host {
-			b.hosts = append(b.hosts[:i], b.hosts[i+1:]...)
+			b.nodes = append(b.nodes[:i], b.nodes[i+1:]...)
 			return
 		}
 	}
@@ -61,5 +61,5 @@ func (b *BaseBalancer) Algo() string {
 }
 
 func (b *BaseBalancer) Hosts() []UpstreamNode {
-	return b.hosts
+	return b.nodes
 }

@@ -1,6 +1,7 @@
 package balancer
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -58,7 +59,9 @@ func HealthCheckAll(balancers []Balancer, interval uint) {
 				case <-ticker.C:
 					nodes := bb.Hosts()
 					var wg sync.WaitGroup
+					fmt.Println("Length of nodes:", len(nodes))
 					for _, node := range nodes {
+						fmt.Println(node.Url.Host)
 						wg.Add(1)
 						go func(n UpstreamNode) {
 							defer wg.Done()

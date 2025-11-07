@@ -15,10 +15,10 @@ func init() {
 }
 
 // NewRoundRobin create new RoundRobin balancer
-func NewRoundRobin(name, algo string, hosts []UpstreamNode) Balancer {
+func NewRoundRobin(name, algo string, nodes []UpstreamNode) Balancer {
 
 	alive := make(map[string]bool)
-	for _, node := range hosts {
+	for _, node := range nodes {
 		host := node.Url.Host
 		alive[host] = true // initial mark alive
 	}
@@ -26,7 +26,7 @@ func NewRoundRobin(name, algo string, hosts []UpstreamNode) Balancer {
 	return &RoundRobin{
 		i: atomic.Uint64{},
 		BaseBalancer: BaseBalancer{
-			hosts: hosts,
+			nodes: nodes,
 			name:  name,
 			algo:  algo,
 			alive: alive,
@@ -38,9 +38,9 @@ func NewRoundRobin(name, algo string, hosts []UpstreamNode) Balancer {
 func (r *RoundRobin) Balance(_ string) (UpstreamNode, error) {
 	r.RLock()
 	defer r.RUnlock()
-	if len(r.hosts) == 0 {
+	if len(r.nodes) == 0 {
 		return UpstreamNode{}, ErrorNoHost
 	}
-	host := r.hosts[r.i.Add(1)%uint64(len(r.hosts))]
+	host := r.nodes[r.i.Add(1)%uint64(len(r.nodes))]
 	return host, nil
 }
