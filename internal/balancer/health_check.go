@@ -1,12 +1,18 @@
 package balancer
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"LensGateway.com/util"
+)
+
+// package-level supervisor state so HealthCheckAll can be called
+// multiple times without creating duplicate workers.
+var (
+	healthMu      sync.Mutex
+	healthWorkers = make(map[string]chan struct{})
 )
 
 // ReadAlive reads the alive status of the site
@@ -20,16 +26,9 @@ func (b *BaseBalancer) SetAlive(host string, alive bool) {
 }
 
 func HealthCheckAll(balancers []Balancer, interval uint) {
-	// Supervisor: maintain a set of workers per-balancer by name.
-	// Avoids orphan goroutines when the routing table / balancers are replaced.
-	var (
-		mu      sync.Mutex
-		workers = make(map[string]chan struct{})
-	)
-
 	// Reconcile desired balancers once (callers may call this periodically on update).
-	mu.Lock()
-	defer mu.Unlock()
+	healthMu.Lock()
+	defer healthMu.Unlock()
 
 	desired := make(map[string]Balancer)
 	for _, b := range balancers {
@@ -37,20 +36,20 @@ func HealthCheckAll(balancers []Balancer, interval uint) {
 	}
 
 	// stop workers for balancers that no longer exist
-	for name, stopCh := range workers {
+	for name, stopCh := range healthWorkers {
 		if _, ok := desired[name]; !ok {
 			close(stopCh)
-			delete(workers, name)
+			delete(healthWorkers, name)
 		}
 	}
 
 	// start workers for new balancers
 	for name, b := range desired {
-		if _, ok := workers[name]; ok {
+		if _, ok := healthWorkers[name]; ok {
 			continue
 		}
 		stopCh := make(chan struct{})
-		workers[name] = stopCh
+		healthWorkers[name] = stopCh
 		go func(bb Balancer, stop <-chan struct{}) {
 			ticker := time.NewTicker(time.Duration(interval) * time.Second)
 			defer ticker.Stop()
@@ -59,9 +58,8 @@ func HealthCheckAll(balancers []Balancer, interval uint) {
 				case <-ticker.C:
 					nodes := bb.Hosts()
 					var wg sync.WaitGroup
-					fmt.Println("Length of nodes:", len(nodes))
 					for _, node := range nodes {
-						fmt.Println(node.Url.Host)
+						// probe each node concurrently
 						wg.Add(1)
 						go func(n UpstreamNode) {
 							defer wg.Done()
