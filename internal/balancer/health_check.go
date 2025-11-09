@@ -26,7 +26,9 @@ func (b *BaseBalancer) SetAlive(host string, alive bool) {
 }
 
 func HealthCheckAll(balancers []Balancer, interval uint) {
-	// Reconcile desired balancers once (callers may call this periodically on update).
+	// Simplified policy: stop all existing health-check workers and recreate
+	// them from the latest balancers slice. This avoids complex diffing when
+	// balancer internals (like hosts) change.
 	healthMu.Lock()
 	defer healthMu.Unlock()
 
@@ -35,19 +37,17 @@ func HealthCheckAll(balancers []Balancer, interval uint) {
 		desired[b.Name()] = b
 	}
 
-	// stop workers for balancers that no longer exist
+	// stop all existing workers unconditionally and clear the map. This keeps
+	// the implementation simple: callers that rebuild the routing table can
+	// call HealthCheckAll and expect health-check workers to reflect the
+	// latest configuration.
 	for name, stopCh := range healthWorkers {
-		if _, ok := desired[name]; !ok {
-			close(stopCh)
-			delete(healthWorkers, name)
-		}
+		close(stopCh)
+		delete(healthWorkers, name)
 	}
 
-	// start workers for new balancers
+	// start workers for desired balancers
 	for name, b := range desired {
-		if _, ok := healthWorkers[name]; ok {
-			continue
-		}
 		stopCh := make(chan struct{})
 		healthWorkers[name] = stopCh
 		go func(bb Balancer, stop <-chan struct{}) {
