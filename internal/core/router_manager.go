@@ -143,60 +143,6 @@ func (rm *RouterManager) UpdateUpstreams(upstreams []config.UpstreamConfig) {
 	rm.table.Store(tbl)
 }
 
-// 将上游配置构建为运行态表
-// func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
-// 	var tbl routingTable
-// 	// 1) 解析上游
-// 	for _, up := range upstreams {
-// 		scheme := up.Scheme
-// 		if scheme == "" {
-// 			scheme = "http"
-// 		}
-// 		st := upstreamState{name: up.Name, algo: strings.ToLower(up.LoadBalancing)}
-// 		if st.algo == "" {
-// 			st.algo = "round_robin"
-// 		}
-// 		for _, host := range up.Hosts {
-// 			var u *url.URL
-// 			if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-// 				parsed, err := url.Parse(host)
-// 				if err != nil {
-// 					log.Printf("skip invalid upstream host %q: %v", host, err)
-// 					continue
-// 				}
-// 				u = parsed
-// 			} else {
-// 				u = &url.URL{Scheme: scheme, Host: host}
-// 			}
-// 			st.nodes = append(st.nodes, upstreamNode{url: u})
-// 		}
-// 		if len(st.nodes) == 0 {
-// 			log.Printf("upstream %q has no valid nodes; skipping", up.Name)
-// 			continue
-// 		}
-
-// 		tbl.upstreams = append(tbl.upstreams, st)
-
-// 		// 2) 解析路由
-// 		for _, r := range up.Routes {
-// 			prefix := normalizePrefix(r.Path)
-// 			methods := make(map[string]struct{})
-// 			for _, m := range r.Methods {
-// 				methods[strings.ToUpper(m)] = struct{}{}
-// 			}
-// 			tbl.routes = append(tbl.routes, routeEntry{
-// 				upstreamIdx: len(tbl.upstreams) - 1,
-// 				prefix:      prefix,
-// 				methods:     methods,
-// 				rewrite:     r.Rewrite,
-// 			})
-// 		}
-// 	}
-// 	// 优先匹配更长的前缀
-// 	sort.Slice(tbl.routes, func(i, j int) bool { return len(tbl.routes[i].prefix) > len(tbl.routes[j].prefix) })
-// 	return tbl
-// }
-
 func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 	var tbl routingTable
 
@@ -206,7 +152,7 @@ func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 			scheme = "http"
 		}
 
-		// 1) 解析上游服务节点
+		// parse upstream server node
 		nodes := []balancer.UpstreamNode{}
 		for _, host := range up.Hosts {
 			var u *url.URL
@@ -239,7 +185,7 @@ func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 		}
 		tbl.balancers = append(tbl.balancers, balancerx)
 
-		// 2) 解析路由
+		// parse node
 		for _, r := range up.Routes {
 			prefix := normalizePrefix(r.Path)
 			methods := make(map[string]struct{})
@@ -282,10 +228,10 @@ func buildRoutingTable(upstreams []config.UpstreamConfig) routingTable {
 		}
 	}
 
-	// 启动健康检测
+	// start health check
 	balancer.HealthCheckAll(tbl.balancers, 30)
 
-	// 优先匹配更长的前缀
+	// perfer match route with longer prefix
 	sort.Slice(tbl.routes, func(i, j int) bool { return len(tbl.routes[i].prefix) > len(tbl.routes[j].prefix) })
 	return tbl
 }

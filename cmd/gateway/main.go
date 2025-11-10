@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"LensGateway.com/internal/config"
@@ -14,8 +18,10 @@ import (
 )
 
 func main() {
-	// load configuration
-	conf, err := config.LoadConfig("./config/gateway.yaml")
+	const configPath = "./config/gateway.yaml"
+
+	// Load configuration.
+	conf, err := config.LoadConfig(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -84,10 +90,53 @@ func main() {
 	// capture all routes except configured ones(e.g. /healthz)
 	router.NoRoute(routerManager.HandleRequest)
 
+	// Start server with graceful shutdown and hot-reload capabilities.
+	srv := &http.Server{
+		Addr:    conf.Global.ListenAddr,
+		Handler: router,
+	}
+
+	// Goroutine for listening for signals (shutdown and reload).
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+		for {
+			receivedSignal := <-sig
+			switch receivedSignal {
+			case syscall.SIGINT, syscall.SIGTERM:
+				log.Println("Shutdown signal received, graceful shutdown...")
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				if err := srv.Shutdown(ctx); err != nil {
+					log.Fatalf("Server forced to shutdown: %v", err)
+				}
+				return
+			case syscall.SIGHUP:
+				log.Println("Reload signal (SIGHUP) received, attempting to reload configuration...")
+				newConf, err := config.LoadConfig(configPath)
+				if err != nil {
+					log.Printf("Error reloading config, keeping the old configuration. Error: %v", err)
+					continue // keep running with the old config
+				}
+
+				// In a file-based config source, we update the upstreams.
+				// For etcd, the watch mechanism handles this automatically.
+				if conf.ConfigSource.Type == "file" {
+					routerManager.UpdateUpstreams(newConf.Upstreams)
+					log.Println("Configuration reloaded successfully. Upstreams updated.")
+				} else {
+					log.Println("Configuration reload via SIGHUP is only supported for 'file' config source. Ignoring.")
+				}
+			}
+		}
+	}()
+
 	// start server
 	fig := figure.NewFigure("LensGateway", "", true)
 	fig.Print()
-	if err := router.Run(conf.Global.ListenAddr); err != nil {
-		log.Fatal(err)
+	log.Printf("Server listening on %s", conf.Global.ListenAddr)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("listen: %s\n", err)
 	}
+	log.Println("Server exiting.")
 }

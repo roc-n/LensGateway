@@ -44,7 +44,7 @@ func (s *Service) Start() {
 	}()
 }
 
-// Privoides a non-blocking way to send log entries to the channel.
+// Privoide a non-blocking way to send log entries to the channel.
 func (s *Service) Log(entry *Entry) {
 	// select-default scheme for non-blocking send
 	select {
