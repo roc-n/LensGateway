@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -17,11 +18,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var (
+	confPath string
+)
+
+func init() {
+	flag.StringVar(&confPath, "conf", "config/gateway.yaml", "gateway config file path")
+}
+
 func main() {
-	const configPath = "./config/gateway.yaml"
+	flag.Parse()
 
 	// Load configuration.
-	conf, err := config.LoadConfig(configPath)
+	conf, err := config.LoadConfig(confPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -113,7 +122,7 @@ func main() {
 				return
 			case syscall.SIGHUP:
 				log.Println("Reload signal (SIGHUP) received, attempting to reload configuration...")
-				newConf, err := config.LoadConfig(configPath)
+				newConf, err := config.LoadConfig(confPath)
 				if err != nil {
 					log.Printf("Error reloading config, keeping the old configuration. Error: %v", err)
 					continue // keep running with the old config

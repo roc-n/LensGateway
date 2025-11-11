@@ -1,0 +1,45 @@
+# ---- Build Stage ----
+# 使用官方Go语言镜像作为构建环境
+FROM golang:1.24-alpine AS builder
+
+# 设置必要的环境变量
+# CGO_ENABLED=0 禁用CGO，强制生成静态链接的二进制文件
+# GOOS=linux 指定目标操作系统为Linux
+ENV CGO_ENABLED=0 GOOS=linux
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制go.mod&go.sum文件，下载依赖
+# 利用Docker层缓存机制，只要依赖没变化，就不需要重新下载
+COPY go.mod go.sum ./
+RUN go env -w GOPROXY=https://goproxy.cn,direct
+RUN go mod download
+
+COPY . .
+
+# 编译应用
+# -a 强制重新构建
+# -installsuffix cgo 避免CGO相关的缓存问题
+# -o /gateway 指定输出的二进制文件名为gateway，放在根目录下
+RUN go build -a -installsuffix cgo -o /gateway ./cmd/gateway/main.go
+
+
+# ---- Final Stage ----
+# 使用一个非常轻量的 alpine 镜像作为最终的运行环境
+FROM alpine:latest
+
+# 从builder阶段复制编译好的二进制文件到最终镜像的/app目录下
+COPY --from=builder /gateway /app/gateway
+
+# 复制配置文件到最终镜像的/app目录下
+COPY config/gateway.yaml /app/config.yaml
+
+# 声明服务监听端口，需要与gateway.yaml对齐
+EXPOSE 7000
+
+# 设置工作目录
+WORKDIR /app
+
+# 运行网关程序，并通过 -conf 参数指定配置文件的路径
+CMD ["./gateway", "-conf", "./config.yaml"]
