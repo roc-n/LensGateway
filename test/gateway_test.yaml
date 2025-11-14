@@ -67,8 +67,8 @@ upstreams:
     hosts: ["localhost:8081"]
     load_balancing: "round-robin"
     routes:
-      - path: "/"
-        # methods: ["GET", "POST"]
+      - path: "/api/users"
+        methods: ["GET", "POST"]
         # 可选：重写为后端路径前缀，例如去掉 /api
         # rewrite: "/users/"
         # 为此路由配置专属的 auth_jwt 中间件
