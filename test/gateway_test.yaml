@@ -1,0 +1,90 @@
+############################
+# global congiguration
+############################
+global:
+  listen_addr: ":7000"
+  trusted_proxies:
+    # - "192.168.0.0/16"
+
+############################
+# middleware congiguration
+############################
+middlewares:
+
+  # request log middleware
+  logging:
+    enabled: true
+    order: 1
+    config:
+      buffer_size: 1024 # default size of the buffered channel for log entries
+
+  # auth middleware (JWT)
+  auth_jwt:
+    enabled: false # 是否启用该中间件
+    order: 2 # 在中间件链中的顺序
+    config:
+      secret_key: "${JWT_SECRET}" # 支持从环境变量读取
+      token_lookup: "header:Authorization"
+      # 可以配置哪些路由需要跳过认证
+      skip_paths: ["/healthz", "/login"]
+
+  # rate limiting middleware
+  rate_limiter:
+    enabled: true
+    order: 3
+    config:
+      strategy: "ip" # 可选: "ip", "route", "combined"
+      # 全局路由限流配置 (当strategy为route或combined时生效)
+      global:
+        requests_per_second: 1000
+        burst: 500
+      # 每个IP的限流配置 (当strategy为ip或combined时生效)
+      per_ip:
+        requests_per_second: 50
+        burst: 20
+      # 存储后端： "local"（内存）或 "redis"（分布式）
+      store: "local"
+      redis_addr: "localhost:6379" # 如果store是redis，则需要此配置
+
+  # URL rewrite middleware
+  url_rewriter:
+    enabled: true
+    order: 4
+    config:
+      rules:
+        - path: "/v1/old-api/**"
+          target: "/v1/new-api/"
+          # 更多复杂规则，如正则替换
+        - path: "/users/(\\d+)/profile"
+          target: "/internal/profile?user_id=$1"
+
+########################
+# upstream congiguration
+########################
+upstreams:
+  - name: "test-service"
+    scheme: "http"
+    hosts: ["localhost:8081"]
+    load_balancing: "round-robin"
+    routes:
+      - path: "/api/users/**"
+        methods: ["GET", "POST"]
+        # 可选：重写为后端路径前缀，例如去掉 /api
+        rewrite: "/users/"
+        # 为此路由配置专属的 auth_jwt 中间件
+        middlewares:
+          - name: "auth_jwt"
+            config:
+              # 密钥现在在这里定义
+              secret_key: "${JWT_SECRET}" # 从环境变量读取
+              token_lookup: "header:Authorization"
+
+
+# 配置源（决定upstreams和middlewares从哪里加载）
+config_source:
+  type: "file"
+  file_path: "./config/gateway.yaml"
+  etcd:
+    endpoints: ["localhost:2379"]
+    key: "/my-gateway/config"
+    watch: true

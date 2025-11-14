@@ -8,7 +8,7 @@ import (
 )
 
 func TestRequestLogging(t *testing.T) {
-	url, stop, buf, err := setupGateway()
+	url, stop, buf, err := setupForLoggingTest()
 	if err != nil {
 		t.Fatalf("failed to start gateway: %v", err)
 	}

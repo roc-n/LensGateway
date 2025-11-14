@@ -2,9 +2,9 @@
 # 使用官方Go语言镜像作为构建环境
 FROM golang:1.24-alpine AS builder
 
-# 设置必要的环境变量
+# 设置必要环境变量
 # CGO_ENABLED=0 禁用CGO，强制生成静态链接的二进制文件
-# GOOS=linux 指定目标操作系统为Linux
+# GOOS=linux 指定操作系统为Linux
 ENV CGO_ENABLED=0 GOOS=linux
 
 # 设置工作目录
@@ -20,7 +20,7 @@ COPY . .
 
 # 编译应用
 # -a 强制重新构建
-# -installsuffix cgo 避免CGO相关的缓存问题
+# -installsuffix cgo 避免CGO相关缓存问题
 # -o /gateway 指定输出的二进制文件名为gateway，放在根目录下
 RUN go build -a -installsuffix cgo -o /gateway ./cmd/gateway/main.go
 
@@ -35,7 +35,7 @@ COPY --from=builder /gateway /app/gateway
 # 复制配置文件到最终镜像的/app目录下
 COPY config/gateway.yaml /app/config.yaml
 
-# 声明服务监听端口，需要与gateway.yaml对齐
+# 声明服务监听端口，与gateway.yaml对齐
 EXPOSE 7000
 
 # 设置工作目录
