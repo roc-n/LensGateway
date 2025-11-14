@@ -16,7 +16,7 @@ func TestRequestLogging(t *testing.T) {
 	defer stop()
 
 	fmt.Println(url)
-	resp, err := http.Get(url + "/api/users/")
+	resp, err := http.Get(url + "/")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}

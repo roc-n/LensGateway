@@ -70,7 +70,7 @@ upstreams:
       - path: "/"
         # methods: ["GET", "POST"]
         # 可选：重写为后端路径前缀，例如去掉 /api
-        rewrite: "/users/"
+        # rewrite: "/users/"
         # 为此路由配置专属的 auth_jwt 中间件
         # middlewares:
           # - name: "auth_jwt"
