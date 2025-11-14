@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -14,7 +15,8 @@ func TestRequestLogging(t *testing.T) {
 	}
 	defer stop()
 
-	resp, err := http.Get(url + "/")
+	fmt.Println(url)
+	resp, err := http.Get(url + "/api/users/")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}

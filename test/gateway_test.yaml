@@ -67,17 +67,17 @@ upstreams:
     hosts: ["localhost:8081"]
     load_balancing: "round-robin"
     routes:
-      - path: "/api/users/**"
-        methods: ["GET", "POST"]
+      - path: "/"
+        # methods: ["GET", "POST"]
         # 可选：重写为后端路径前缀，例如去掉 /api
         rewrite: "/users/"
         # 为此路由配置专属的 auth_jwt 中间件
-        middlewares:
-          - name: "auth_jwt"
-            config:
-              # 密钥现在在这里定义
-              secret_key: "${JWT_SECRET}" # 从环境变量读取
-              token_lookup: "header:Authorization"
+        # middlewares:
+          # - name: "auth_jwt"
+          #   config:
+          #     # 密钥现在在这里定义
+          #     secret_key: "${JWT_SECRET}" # 从环境变量读取
+          #     token_lookup: "header:Authorization"
 
 
 # 配置源（决定upstreams和middlewares从哪里加载）

@@ -17,7 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const confPath = "test/gateway_test.yaml"
+const confPath = "gateway_test.yaml"
 
 func createTestBackend(addr ...string) *httptest.Server {
 	engine := gin.New()
@@ -40,7 +40,7 @@ func createTestBackend(addr ...string) *httptest.Server {
 }
 
 // withStdoutCapture captures stdout for the duration of a function call.
-func withStdoutCapture(fn func() error) (vals map[string]any, err error) {
+func withStdoutCapture(fn func() error) (map[string]any, error) {
 	// Before calling the function, redirect stdout.
 	oldStdout := os.Stdout
 	r, w, pipeErr := os.Pipe()
@@ -50,7 +50,7 @@ func withStdoutCapture(fn func() error) (vals map[string]any, err error) {
 	os.Stdout = w
 
 	// Execute the function and capture its error.
-	err = fn()
+	err := fn()
 
 	// After the function call, restore stdout.
 	os.Stdout = oldStdout
@@ -60,6 +60,7 @@ func withStdoutCapture(fn func() error) (vals map[string]any, err error) {
 		return nil, err
 	}
 
+	vals := make(map[string]any)
 	vals["r"] = r
 	vals["w"] = w
 
@@ -68,7 +69,7 @@ func withStdoutCapture(fn func() error) (vals map[string]any, err error) {
 
 func setupGatewayCore(exfn func(fn func() error) (map[string]any, error)) (gatewaySrv, backendSrv *httptest.Server, vals map[string]any, err error) {
 	// create backend server & load gateway config
-	backend := createTestBackend("127.0.0.1:8081")
+	backend := createTestBackend("localhost:8081")
 	conf, _ := config.LoadConfig(confPath)
 
 	// build gin router
