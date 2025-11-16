@@ -14,6 +14,7 @@ import (
 	"LensGateway.com/internal/core"
 	_ "LensGateway.com/internal/logging"
 	"LensGateway.com/internal/middleware"
+	"LensGateway.com/internal/observe"
 	"github.com/common-nighthawk/go-figure"
 	"github.com/gin-gonic/gin"
 )
@@ -49,6 +50,8 @@ func main() {
 
 	// gateway health check endpoint
 	router.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
+	// Prometheus metrics endpoint
+	router.GET("/metrics", observe.MetricsHandler())
 
 	// 设置动态路由和反向代理（支持 etcd 动态上游）
 	var routerManager *core.RouterManager
@@ -88,6 +91,7 @@ func main() {
 		}
 	}
 
+
 	// register pre-match middleware for route prefix matching
 	router.Use(routerManager.PreMatchMiddleware())
 
@@ -97,6 +101,7 @@ func main() {
 		log.Fatalf("Failed to setup middlewares: %v", err)
 	}
 	// capture all routes except configured ones(e.g. /healthz)
+
 	router.NoRoute(routerManager.HandleRequest)
 
 	// Start server with graceful shutdown and hot-reload capabilities.

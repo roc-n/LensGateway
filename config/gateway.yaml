@@ -18,6 +18,12 @@ middlewares:
     config:
       buffer_size: 1024 # default size of the buffered channel for log entries
 
+  # observe middleware (Prometheus)
+  observe:
+    enabled: true
+    order: 5
+    config:
+
   # auth middleware (JWT)
   auth_jwt:
     enabled: false # 是否启用该中间件
