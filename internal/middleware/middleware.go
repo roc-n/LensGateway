@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -102,23 +103,127 @@ func init() {
 		}, nil
 	})
 
-	// cors (very basic)
-	Register("cors", func(cfg map[string]interface{}) (gin.HandlerFunc, error) {
+	// cors
+	Register("cors", func(cfg map[string]any) (gin.HandlerFunc, error) {
 		allowOrigin := util.StrOr(cfg["allow_origin"], "*")
 		allowMethods := util.StrOr(cfg["allow_methods"], "GET,POST,PUT,DELETE,OPTIONS")
-		allowHeaders := util.StrOr(cfg["allow_headers"], "*")
+		allowHeaders := util.StrOr(cfg["allow_headers"], "") // if empty, echo request's Access-Control-Request-Headers
+		exposeHeaders := util.StrOr(cfg["expose_headers"], "")
 		allowCredentials := strings.EqualFold(util.StrOr(cfg["allow_credentials"], "false"), "true")
+		maxAge := util.StrOr(cfg["max_age"], "600")
+
+		// helpers
+		parseList := func(s string) []string {
+			if s == "" {
+				return nil
+			}
+			parts := strings.Split(s, ",")
+			out := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
+		}
+
+		allowedOrigins := parseList(allowOrigin)
+
+		// match allowed origin (supports exact, '*' and wildcard patterns like https://*.example.com)
+		allowedOriginMatch := func(origin string) bool {
+			if len(allowedOrigins) == 0 {
+				return false
+			}
+			for _, a := range allowedOrigins {
+				if a == "*" {
+					return true
+				}
+				if a == origin {
+					return true
+				}
+				if strings.Contains(a, "*") {
+					esc := regexp.QuoteMeta(a)
+					pattern := "^" + strings.ReplaceAll(esc, "\\*", ".*") + "$"
+					re, err := regexp.Compile(pattern)
+					if err != nil {
+						continue
+					}
+					if re.MatchString(origin) {
+						return true
+					}
+				}
+			}
+			return false
+		}
+
+		globalStar := false
+		if allowOrigin == "*" || len(allowedOrigins) == 0 {
+			globalStar = true
+		}
+
 		return func(c *gin.Context) {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-			c.Writer.Header().Set("Access-Control-Allow-Methods", allowMethods)
-			c.Writer.Header().Set("Access-Control-Allow-Headers", allowHeaders)
+			origin := c.Request.Header.Get("Origin")
+			if origin == "" {
+				// not a CORS request
+				c.Next()
+				return
+			}
+
+			// decide Access-Control-Allow-Origin
+			setOrigin := ""
+			if globalStar {
+				if allowCredentials {
+					// cannot use '*' when credentials are allowed; echo back request origin
+					setOrigin = origin
+				} else {
+					setOrigin = "*"
+				}
+			} else {
+				if allowedOriginMatch(origin) {
+					setOrigin = origin
+				} else {
+					// origin not allowed -> continue without CORS headers
+					c.Next()
+					return
+				}
+			}
+
+			// Common headers
+			c.Writer.Header().Set("Access-Control-Allow-Origin", setOrigin)
 			if allowCredentials {
 				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 			}
+			// inform caches/proxies that response varies by Origin
+			c.Writer.Header().Add("Vary", "Origin")
+
+			if exposeHeaders != "" {
+				c.Writer.Header().Set("Access-Control-Expose-Headers", exposeHeaders)
+			}
+
+			// Preflight
 			if c.Request.Method == httpMethodOptions {
+				// Methods
+				c.Writer.Header().Set("Access-Control-Allow-Methods", allowMethods)
+
+				// Headers: configured or echo request's desired headers
+				acrh := c.Request.Header.Get("Access-Control-Request-Headers")
+				if allowHeaders != "" {
+					c.Writer.Header().Set("Access-Control-Allow-Headers", allowHeaders)
+				} else if acrh != "" {
+					c.Writer.Header().Set("Access-Control-Allow-Headers", acrh)
+				}
+
+				// Max-Age
+				if maxAge != "" {
+					c.Writer.Header().Set("Access-Control-Max-Age", maxAge)
+				}
+
 				c.AbortWithStatus(204)
 				return
 			}
+
+			// Simple request -> continue
 			c.Next()
 		}, nil
 	})
